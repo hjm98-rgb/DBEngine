@@ -24,3 +24,7 @@ target_link_libraries(dbengine-shot PRIVATE dbengine)
 # 通用2D引擎内核演示（证明是通用引擎，不只是MC）
 add_executable(dbengine-2ddemo test/engine2d_demo.cpp)
 target_link_libraries(dbengine-2ddemo PRIVATE dbengine)
+
+# 3D 网格模型渲染演示（载入 .obj 真实3D模型，证明不只是像素方块）
+add_executable(dbengine-mesh test/mesh_demo.cpp)
+target_link_libraries(dbengine-mesh PRIVATE dbengine)
