@@ -1,6 +1,7 @@
 // win32_main.cpp - DBEngine Windows 原生窗口后端：用 GDI 窗口显示引擎(软件渲染)的画面。
 // 复用心形化的渲染内核(跨平台)，只换窗口层。CI 用 MSVC 编译成 dbengine-win.exe。
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX            // 避免 windows.h 的 min/max 宏破坏 std::min/std::max
 #include <windows.h>
 #include "engine/framebuffer.hpp"
 #include "engine/voxel.hpp"
