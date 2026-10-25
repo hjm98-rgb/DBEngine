@@ -93,7 +93,20 @@ struct App {
     void runCommand(const std::string& line) {
         std::istringstream ss(line); std::string tok; ss>>tok;
         if (tok=="help") {
-            log = "cmds: save F  load F  fill B  place B x y z  model NAME  modlist  tp x y z  host  clear";
+            log = "cmds: save F  load F  fill B  place B x y z  model NAME  modlist  tp x y z  host  clear  run SCRIPT";
+        } else if (tok=="run") {   // 编辑代码：读脚本文件逐行执行
+            std::string p; ss>>p;
+            if (p.empty()) { log="need script file"; return; }
+            std::ifstream f(p); if (!f) { log = "cannot open " + p; return; }
+            std::string l; int n=0;
+            while (std::getline(f, l)) {
+                if (l.empty() || l[0]=='#') continue;
+                std::istringstream t(l); std::string w; t>>w;
+                if (w.empty()) continue;
+                n++;
+                runCommand(l);      // 递归执行脚本行
+            }
+            log = "ran script " + p + " (" + std::to_string(n) + " lines)";
         } else if (tok=="save" || tok=="load") {
             std::string p; ss>>p;
             if (p.empty()) { log="need filename"; return; }
