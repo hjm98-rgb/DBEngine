@@ -62,3 +62,7 @@ target_link_libraries(dbengine-textured PRIVATE dbengine)
 # 物理演示（重力+落地+弹跳）
 add_executable(dbengine-physics test/physics_demo.cpp)
 target_link_libraries(dbengine-physics PRIVATE dbengine)
+
+# 动画演示（2D精灵跳动+变色 / 3D模型旋转）
+add_executable(dbengine-anim test/anim_demo.cpp)
+target_link_libraries(dbengine-anim PRIVATE dbengine)
