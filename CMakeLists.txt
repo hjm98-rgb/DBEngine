@@ -12,10 +12,12 @@ add_library(dbengine STATIC
 target_include_directories(dbengine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/engine)
 target_link_libraries(dbengine PUBLIC ZLIB::ZLIB)
 
-# 桌面版（Linux X11）
-find_package(X11 REQUIRED)
-add_executable(dbengine-desktop platform/desktop_main.cpp)
-target_link_libraries(dbengine-desktop PRIVATE dbengine ${X11_LIBRARIES} Threads::Threads)
+# 桌面版（Linux X11；无X11则跳过，不影响其他目标）
+find_package(X11 QUIET)
+if (X11_FOUND)
+  add_executable(dbengine-desktop platform/desktop_main.cpp)
+  target_link_libraries(dbengine-desktop PRIVATE dbengine ${X11_LIBRARIES} Threads::Threads)
+endif()
 
 # 离线渲染验证工具（无窗口，输出 PNG）
 add_executable(dbengine-shot test/offscreen.cpp)
@@ -45,12 +47,12 @@ target_link_libraries(dbengine-minigame PRIVATE dbengine)
 add_executable(dbengine-big3d test/big3d_demo.cpp)
 target_link_libraries(dbengine-big3d PRIVATE dbengine)
 
-# GPU渲染后端验证（OpenGL: 光照+深度，读回像素；找不到GL则跳过，不影响其他目标）
-find_package(X11 QUIET)
+# GPU渲染后端验证（OpenGL: 光照+深度，读回像素；找不到则跳过，不影响其他目标）
 find_library(GLLIB GL)
-if (GLLIB AND X11_FOUND)
+find_library(X11LIB X11)
+if (GLLIB AND X11LIB)
   add_executable(dbengine-gl test/gl_demo.cpp)
-  target_link_libraries(dbengine-gl PRIVATE dbengine ${GLLIB} ${X11_LIBRARIES} pthread)
+  target_link_libraries(dbengine-gl PRIVATE dbengine ${GLLIB} ${X11LIB} pthread)
 endif()
 
 # 开放世界开车(GTA类)演示
