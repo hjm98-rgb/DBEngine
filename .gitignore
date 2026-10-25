@@ -1,0 +1,6 @@
+build/
+*.png.swp
+*.o
+*.obj
+shot.png
+.DS_Store

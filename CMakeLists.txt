@@ -1,0 +1,22 @@
+cmake_minimum_required(VERSION 3.16)
+project(DBEngine LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(ZLIB REQUIRED)
+find_package(Threads REQUIRED)
+
+add_library(dbengine STATIC
+  engine/framebuffer.cpp
+)
+target_include_directories(dbengine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/engine)
+target_link_libraries(dbengine PUBLIC ZLIB::ZLIB)
+
+# 桌面版（Linux X11）
+find_package(X11 REQUIRED)
+add_executable(dbengine-desktop platform/desktop_main.cpp)
+target_link_libraries(dbengine-desktop PRIVATE dbengine ${X11_LIBRARIES} Threads::Threads)
+
+# 离线渲染验证工具（无窗口，输出 PNG）
+add_executable(dbengine-shot test/offscreen.cpp)
+target_link_libraries(dbengine-shot PRIVATE dbengine)
