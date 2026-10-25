@@ -44,3 +44,9 @@ target_link_libraries(dbengine-minigame PRIVATE dbengine)
 # 大型3D演示（纯.obj模型场景：坦克+楼房，无体素，证明不锁MC风格）
 add_executable(dbengine-big3d test/big3d_demo.cpp)
 target_link_libraries(dbengine-big3d PRIVATE dbengine)
+
+# GPU渲染后端验证（OpenGL: 光照+深度，读回像素）
+find_package(X11 REQUIRED)
+find_library(GLLIB GL REQUIRED)
+add_executable(dbengine-gl test/gl_demo.cpp)
+target_link_libraries(dbengine-gl PRIVATE dbengine ${GLLIB} ${X11_LIBRARIES} pthread)
