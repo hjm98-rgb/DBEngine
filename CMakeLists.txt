@@ -58,3 +58,7 @@ target_link_libraries(dbengine-gta PRIVATE dbengine)
 # 带贴图的3D模型演示（UV材质映射：木头/迷彩/草地）
 add_executable(dbengine-textured test/textured_demo.cpp)
 target_link_libraries(dbengine-textured PRIVATE dbengine)
+
+# 物理演示（重力+落地+弹跳）
+add_executable(dbengine-physics test/physics_demo.cpp)
+target_link_libraries(dbengine-physics PRIVATE dbengine)

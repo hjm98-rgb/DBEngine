@@ -53,8 +53,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build (MSVC)
-        run: cl /O2 /EHsc /I engine test/offscreen.cpp engine/framebuffer.cpp /link /OUT:dbengine-win.exe
+      - name: Build (MSVC, GDI窗口后端)
+        run: cl /O2 /EHsc /I . platform/win32_main.cpp engine/framebuffer.cpp /link /OUT:dbengine-win.exe user32.lib gdi32.lib
       - name: Package
         shell: bash
         run: |

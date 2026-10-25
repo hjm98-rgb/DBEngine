@@ -149,4 +149,25 @@ inline PlacedModel* hitTestModels(std::vector<PlacedModel>& models, const V3& o,
     return best;
 }
 
+// 简单3D物理：对可动模型施加重力并落到地形表面（可弹跳/静止）
+struct Physics3 {
+    std::vector<float> vy;              // 每个模型的垂直速度
+    float gravity = 20.0f, bounce = 0.0f;
+
+    void step(std::vector<PlacedModel>& models, const World& terrain, float dt) {
+        if (vy.size() < models.size()) vy.resize(models.size(), 0);
+        for (size_t i = 0; i < models.size(); i++) {
+            vy[i] -= gravity * dt;                          // 重力
+            models[i].pos = models[i].pos + V3(0, vy[i]*dt, 0);
+            float g = 0;                                    // 地形高度（模型底面贴地）
+            for (int y = terrain.sy-1; y >= 0; y--)
+                if (terrain.solid((int)models[i].pos.x, y, (int)models[i].pos.z)) { g = (float)y+1; break; }
+            if (models[i].pos.y < g) {
+                models[i].pos.y = g;
+                if (vy[i] < 0) vy[i] = bounce > 0 ? -vy[i]*bounce : 0;
+            }
+        }
+    }
+};
+
 } // namespace dbg
