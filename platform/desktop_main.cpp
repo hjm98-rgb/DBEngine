@@ -192,19 +192,33 @@ struct App {
     void render() {
         vr.render(fb, cam, world, 14, tp);
         drawHUD();
+        // XCreateImage 传 NULL 时不会分配像素缓冲(data=NULL)，需自己分配，用完释放
         XImage* img = XCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)),
-                                   24, ZPixmap, 0, (char*)fb.px.data(),
-                                   WIN_W, WIN_H, 32, WIN_W*4);
-        XPutImage(dpy, win, gc, img, 0,0, 0,0, WIN_W, WIN_H);
-        XDestroyImage(img);
+                                   24, ZPixmap, 0, nullptr, WIN_W, WIN_H, 32, 0);
+        if (img) {
+            img->data = (char*)malloc((size_t)WIN_H * img->bytes_per_line);
+            if (img->data) {
+                for (int y = 0; y < WIN_H; y++)
+                    memcpy(img->data + (size_t)y*img->bytes_per_line,
+                           fb.px.data() + (size_t)y*WIN_W, (size_t)WIN_W*4);
+                XPutImage(dpy, win, gc, img, 0,0, 0,0, WIN_W, WIN_H);
+                free(img->data);
+                img->data = nullptr;
+            }
+            XDestroyImage(img);
+        }
     }
 
     void loop() {
         XEvent e;
+        fprintf(stderr, "[dbg] loop enter\n");
         while (true) {
-            while (XPending(dpy)) { XNextEvent(dpy, &e); handleEvent(e); }
+            fprintf(stderr, "[dbg] frame=%d\n", frame);
+            while (XPending(dpy)) { XNextEvent(dpy, &e); fprintf(stderr,"[dbg] event %d\n",(int)e.type); handleEvent(e); }
             update(1.0f/60.0f);
+            fprintf(stderr, "[dbg] before render\n");
             render();
+            fprintf(stderr, "[dbg] after render\n");
             XFlush(dpy);
             usleep(16000);
             frame++;
