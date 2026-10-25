@@ -50,3 +50,11 @@ find_package(X11 REQUIRED)
 find_library(GLLIB GL REQUIRED)
 add_executable(dbengine-gl test/gl_demo.cpp)
 target_link_libraries(dbengine-gl PRIVATE dbengine ${GLLIB} ${X11_LIBRARIES} pthread)
+
+# 开放世界开车(GTA类)演示
+add_executable(dbengine-gta test/gta_demo.cpp)
+target_link_libraries(dbengine-gta PRIVATE dbengine)
+
+# 带贴图的3D模型演示（UV材质映射：木头/迷彩/草地）
+add_executable(dbengine-textured test/textured_demo.cpp)
+target_link_libraries(dbengine-textured PRIVATE dbengine)

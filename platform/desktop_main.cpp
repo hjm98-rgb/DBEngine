@@ -34,6 +34,8 @@ struct App {
     std::vector<PlacedModel> placed; // 已摆进场景的模型
     int selModel = 0;                // 当前选中的模组模型
     bool modelMode = false;          // 编辑模式：放方块 或 放模型
+    bool editModelMode = false;      // 编辑已摆放的3D模型（平移/缩放/删除）
+    int selPlaced = -1;              // 当前选中的已摆放模型
     Camera3 cam;
     float vy = 0;
     bool grounded = false;
@@ -216,8 +218,10 @@ struct App {
             if (ks == XK_t || ks == XK_Tab) editMode = !editMode;
             if (ks == XK_F5) runCommand("host 25565");   // 一键搭建服务器
             if (ks == XK_m || ks == XK_g) modelMode = !modelMode;   // 放方块 <-> 放模型
+            if (ks == XK_e) editModelMode = !editModelMode;         // 编辑已摆模型
             if (ks == XK_n) { if (!mods.models.empty()) selModel = (selModel+1)%mods.models.size(); }
             if (ks == XK_b) { if (!mods.models.empty()) selModel = (selModel+mods.models.size()-1)%mods.models.size(); }
+            if (ks == XK_x) { if (editModelMode && selPlaced>=0 && selPlaced<(int)placed.size()) { placed.erase(placed.begin()+selPlaced); selPlaced=-1; log="model deleted"; } }
             // 数字键选方块
             static const uint8_t map[8] = {B_GRASS,B_DIRT,B_STONE,B_WOOD,B_LEAVES,B_SAND,B_WATER,B_BRICK};
             for (int i=0;i<8;i++) if (ks == XK_1+i) selBlock = map[i];

@@ -107,6 +107,73 @@ public:
             }
         }
     }
+
+    // 带贴图的网格渲染：平面UV把 Texture 贴到模型上 + 光照（这才是"真模型"的关键）
+    void renderTextured(Framebuffer& fb, const Mesh& m, const Camera3& cam,
+                        V3 obj, float scale, const Texture& tex, float tscale = 1.0f,
+                        V3 lightDir = V3(0.4f, 0.8f, 0.4f)) {
+        int ww = fb.w, hh = fb.h;
+        std::vector<float>& Z = zActive ? *zActive : zbuf;
+        if (zActive) { if ((size_t)Z.size() < (size_t)ww*hh) Z.assign((size_t)ww*hh, 1e30f); }
+        else if ((int)zbuf.size() != ww*hh) { zbuf.assign((size_t)ww*hh, 1e30f); fw=ww; fh=hh; }
+        std::fill(Z.begin(), Z.end(), 1e30f);
+        lastFaces = 0;
+
+        // 模型包围盒 → 平面UV范围
+        V3 lo, hi; if (m.verts.empty()) return;
+        lo = hi = m.verts[0];
+        for (auto& v : m.verts) { lo.x=std::min(lo.x,v.x);lo.y=std::min(lo.y,v.y);lo.z=std::min(lo.z,v.z);
+                                  hi.x=std::max(hi.x,v.x);hi.y=std::max(hi.y,v.y);hi.z=std::max(hi.z,v.z); }
+        float dw = (hi.x-lo.x)>0.01f?(hi.x-lo.x):1, dd = (hi.z-lo.z)>0.01f?(hi.z-lo.z):1;
+
+        V3 R = cam.right(), U = cam.up(), F = cam.forward();
+        lightDir = lightDir.norm();
+
+        for (size_t i = 0; i + 2 < m.faces.size(); i += 3) {
+            V3 wA = obj + m.verts[m.faces[i]] * scale;
+            V3 wB = obj + m.verts[m.faces[i + 1]] * scale;
+            V3 wC = obj + m.verts[m.faces[i + 2]] * scale;
+            V3 n = (wB - wA).cross(wC - wA).norm();
+            if (n.dot(wA - cam.pos) >= 0) continue;
+            lastFaces++;
+            float lum = 0.35f + 0.65f * std::max(0.0f, n.dot(lightDir));
+
+            auto proj = [&](const V3& w) -> float { return (float)ww/2 + (w-cam.pos).dot(R)/(w-cam.pos).dot(F)*f; };
+            auto projy = [&](const V3& w) -> float { return (float)hh/2 - (w-cam.pos).dot(U)/(w-cam.pos).dot(F)*f; };
+            auto dep  = [&](const V3& w) -> float { return (w-cam.pos).dot(F); };
+            float ax=proj(wA), ay=projy(wA), da=dep(wA);
+            float bx=proj(wB), by=projy(wB), db=dep(wB);
+            float cx=proj(wC), cy=projy(wC), dc=dep(wC);
+
+            // 每顶点 UV（平面投影 + 平铺）
+            auto uv = [&](const V3& w) -> V3 {
+                return V3((w.x-lo.x*scale-obj.x)/dw, (w.z-lo.z*scale-obj.z)/dd, 0);
+            };
+            V3 uva=uv(wA), uvb=uv(wB), uvc=uv(wC);
+
+            int minX=std::max(0,(int)std::floor(std::min(ax,std::min(bx,cx)))), maxX=std::min(ww-1,(int)std::ceil(std::max(ax,std::max(bx,cx))));
+            int minY=std::max(0,(int)std::floor(std::min(ay,std::min(by,cy)))), maxY=std::min(hh-1,(int)std::ceil(std::max(ay,std::max(by,cy))));
+            for (int y=minY; y<=maxY; y++) for (int x=minX; x<=maxX; x++) {
+                float det=(bx-ax)*(cy-ay)-(by-ay)*(cx-ax); if (det==0) continue;
+                float pxf=(float)x+0.5f, pyf=(float)y+0.5f;
+                float w0=((bx-pxf)*(cy-pyf)-(by-pyf)*(cx-pxf))/det;
+                float w1=((cx-pxf)*(ay-pyf)-(cy-pyf)*(ax-pxf))/det;
+                float w2=((ax-pxf)*(by-pyf)-(ay-pyf)*(bx-pxf))/det;
+                if (w0<-0.01f||w1<-0.01f||w2<-0.01f) continue;
+                float d=w0*da+w1*db+w2*dc; if (d<=0.1f) continue;
+                float u=w0*uva.x+w1*uvb.x+w2*uvc.x;
+                float v=w0*uva.y+w1*uvb.y+w2*uvc.y;
+                uint32_t tcol = tex.sample(u*tscale, v*tscale);
+                // 乘光照
+                int r=(int)((tcol&255)*lum); if(r>255)r=255;
+                int g=(int)(((tcol>>8)&255)*lum); if(g>255)g=255;
+                int b=(int)(((tcol>>16)&255)*lum); if(b>255)b=255;
+                uint32_t col = 0xff000000|((uint32_t)b<<16)|((uint32_t)g<<8)|(uint32_t)r;
+                int idx=y*ww+x;
+                if (d < Z[idx]) { Z[idx]=d; fb.setPixel(x,y,col); }
+            }
+        }
+    }
 };
 
 } // namespace dbg
