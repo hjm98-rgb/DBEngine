@@ -64,6 +64,7 @@ public:
 // 软件体素渲染器
 class VoxelRenderer {
     std::vector<float> zbuf;
+    std::vector<float>* zActive = nullptr;   // 共享外部深度缓冲时指向它
     int fw = 0, fh = 0;
     float f = 1.0f;
 public:
@@ -107,7 +108,8 @@ private:
                 if (w1 < 0 || w2 < 0 || w3 < 0) continue;
                 float depth = w1*a.d + w2*b.d + w3*c.d;
                 size_t i = (size_t)y*ww + x;
-                if (depth > 0 && depth < zbuf[i]) { zbuf[i] = depth; fb.px[i] = col; }
+                std::vector<float>& Z = zActive ? *zActive : zbuf;
+                if (depth > 0 && depth < Z[i]) { Z[i] = depth; fb.px[i] = col; }
             }
         }
     }
@@ -154,10 +156,11 @@ private:
                 float inv = w1*ia + w2*ib + w3*ic;
                 float d = 1.0f/inv;
                 size_t i = (size_t)y*ww + x;
-                if (d > 0 && d < zbuf[i]) {
+                std::vector<float>& Z = zActive ? *zActive : zbuf;
+                if (d > 0 && d < Z[i]) {
                     float u = (w1*ua + w2*ub + w3*uc) * d;
                     float v = (w1*va + w2*vb + w3*vc) * d;
-                    zbuf[i] = d;
+                    Z[i] = d;
                     fb.px[i] = applyLight(tex.sample(u, v), light);
                 }
             }
@@ -178,12 +181,24 @@ private:
 
 public:
     void render(Framebuffer& fb, const Camera3& cam, const World& w, int renderRange, const TexturePack& tp) {
-        if (fw != fb.w || fh != fb.h) { fw = fb.w; fh = fb.h; zbuf.assign((size_t)fw*fh, 1e9f); }
-        std::fill(zbuf.begin(), zbuf.end(), 1e9f);
+        std::vector<float>* ext = nullptr;
+        doRender(fb, cam, w, renderRange, tp, ext, true);
+    }
+    // 复用外部深度缓冲（与 3D 模型共享遮挡），不画天空，由场景统一画
+    void renderInto(Framebuffer& fb, const Camera3& cam, const World& w, int renderRange, const TexturePack& tp, std::vector<float>& external) {
+        std::vector<float>* ext = &external;
+        doRender(fb, cam, w, renderRange, tp, ext, false);
+    }
+private:
+    void doRender(Framebuffer& fb, const Camera3& cam, const World& w, int renderRange,
+                  const TexturePack& tp, std::vector<float>* ext, bool clearSky) {
+        zActive = ext;
+        if (ext) { if ((size_t)ext->size() < (size_t)fb.w*fb.h) ext->assign((size_t)fb.w*fb.h, 1e9f); std::fill(ext->begin(),ext->end(),1e9f); }
+        else     { if (fw != fb.w || fh != fb.h) { fw = fb.w; fh = fb.h; zbuf.assign((size_t)fw*fh, 1e9f); } std::fill(zbuf.begin(),zbuf.end(),1e9f); }
         lastFaces = 0;
         float vfov = 70.0f * 3.14159265f / 180.0f;
         f = (float)fb.h / 2.0f / std::tan(vfov/2.0f);
-        fb.clear(Color(110, 170, 235)); // 天空
+        if (clearSky) fb.clear(Color(110, 170, 235)); // 天空（只有独占时才画）
 
         int cx = (int)std::floor(cam.pos.x), cy = (int)std::floor(cam.pos.y), cz = (int)std::floor(cam.pos.z);
         int x0 = cx - renderRange, x1 = cx + renderRange;

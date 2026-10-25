@@ -28,3 +28,7 @@ target_link_libraries(dbengine-2ddemo PRIVATE dbengine)
 # 3D 网格模型渲染演示（载入 .obj 真实3D模型，证明不只是像素方块）
 add_executable(dbengine-mesh test/mesh_demo.cpp)
 target_link_libraries(dbengine-mesh PRIVATE dbengine)
+
+# 3D 场景系统演示（天空+地形+模型+模组+玩家）
+add_executable(dbengine-scene test/scene_demo.cpp)
+target_link_libraries(dbengine-scene PRIVATE dbengine)

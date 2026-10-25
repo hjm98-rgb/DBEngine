@@ -39,16 +39,20 @@ inline bool loadOBJ(const std::string& path, Mesh& m) {
 // 3D 网格渲染器：透视 + 背面剔除 + 简单光照(Lambert) + 深度缓冲
 class MeshRenderer {
     std::vector<float> zbuf;
+    std::vector<float>* zActive = nullptr;   // 场景共享深度缓冲时指向它
     int fw = 0, fh = 0;
     float f = 150.0f;   // 焦距：放大远处模型（体素版是 f=1 靠满屏方块）
 public:
     int lastFaces = 0;
+    void useZBuf(std::vector<float>& z) { zActive = &z; }
 
     void render(Framebuffer& fb, const Mesh& m, const Camera3& cam,
                 V3 obj, float scale, Color base, V3 lightDir = V3(0.4f, 0.8f, 0.4f)) {
         int ww = fb.w, hh = fb.h;
-        if ((int)zbuf.size() != ww * hh) { zbuf.assign((size_t)ww * hh, 1e30f); fw = ww; fh = hh; }
-        std::fill(zbuf.begin(), zbuf.end(), 1e30f);
+        std::vector<float>& Z = zActive ? *zActive : zbuf;
+        if (zActive) { if ((size_t)Z.size() < (size_t)ww*hh) Z.assign((size_t)ww*hh, 1e30f); }
+        else if ((int)zbuf.size() != ww*hh) { zbuf.assign((size_t)ww*hh, 1e30f); fw = ww; fh = hh; }
+        std::fill(Z.begin(), Z.end(), 1e30f);
         lastFaces = 0;
 
         V3 R = cam.right(), U = cam.up(), F = cam.forward();
@@ -97,7 +101,8 @@ public:
                     float d = w0 * da + w1 * db + w2 * dc;
                     if (d <= 0.1f) continue;
                     int idx = y * ww + x;
-                    if (d < zbuf[idx]) { zbuf[idx] = d; fb.setPixel(x, y, col); }
+                    std::vector<float>& Z = zActive ? *zActive : zbuf;
+                    if (d < Z[idx]) { Z[idx] = d; fb.setPixel(x, y, col); }
                 }
             }
         }
