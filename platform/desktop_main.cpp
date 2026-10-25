@@ -1,6 +1,9 @@
-// desktop_main.cpp - DBEngine 桌面版（Linux X11）：一个既是编辑器又是游玩的《我的世界》风格示例。
+// desktop_main.cpp - DBEngine 桌面版（Linux X11）：既是编辑器又是游玩的通用场景构建器。
 #include "../engine/framebuffer.hpp"
 #include "../engine/voxel.hpp"
+#include "../engine/texture.hpp"
+#include "../engine/mesh.hpp"
+#include "../engine/scene3.hpp"
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 #include <X11/Xutil.h>
@@ -23,8 +26,14 @@ struct App {
     Display* dpy; Window win; GC gc;
     Framebuffer fb;
     VoxelRenderer vr;
+    MeshRenderer mr;                 // 3D 模型渲染器
     TexturePack tp;
     World world;
+    Scene3 sc;                       // 场景（地形+模型+玩家）
+    Mods mods;                       // mods/ 里的 3D 模型
+    std::vector<PlacedModel> placed; // 已摆进场景的模型
+    int selModel = 0;                // 当前选中的模组模型
+    bool modelMode = false;          // 编辑模式：放方块 或 放模型
     Camera3 cam;
     float vy = 0;
     bool grounded = false;
@@ -36,14 +45,21 @@ struct App {
     bool consoleOn = false;        // 命令控制台
     std::string cmd, log;
 
-    // ---- 构建器：存档 / 读档（世界保存成文件） ----
+    // ---- 构建器：存档 / 读档（世界 + 摆好的3D模型 一起存成文件） ----
     bool saveWorld(const std::string& path) {
         std::ofstream f(path, std::ios::binary);
         if (!f) { log = "save failed: " + path; return false; }
         f.write((char*)&world.sx,4); f.write((char*)&world.sy,4); f.write((char*)&world.sz,4);
         f.write((char*)world.blocks.data(), (long)world.blocks.size());
+        int n = (int)placed.size(); f.write((char*)&n, 4);
+        for (auto& m : placed) {
+            uint8_t ln = (uint8_t)std::min((size_t)255, m.name.size());
+            f.write((char*)&ln,1); f.write(m.name.data(), ln);
+            f.write((char*)&m.pos.x,4); f.write((char*)&m.pos.y,4); f.write((char*)&m.pos.z,4);
+            f.write((char*)&m.scale,4);
+        }
         f.close();
-        log = "saved " + path; return true;
+        log = "saved scene: " + path; return true;
     }
     bool loadWorld(const std::string& path) {
         std::ifstream f(path, std::ios::binary);
@@ -54,14 +70,25 @@ struct App {
         f.read((char*)nw.blocks.data(), (long)nw.blocks.size());
         if ((size_t)f.gcount() != nw.blocks.size()) { log="world file truncated"; return false; }
         world = nw;
-        log = "loaded " + path; return true;
+        int n=0; if (f.read((char*)&n,4)) {
+            placed.clear();
+            for (int i=0;i<n && n<5000;i++) {
+                uint8_t ln=0; if(!f.read((char*)&ln,1)) break;
+                char nm[256]={0}; f.read(nm, ln);
+                V3 p; float sc;
+                f.read((char*)&p.x,4); f.read((char*)&p.y,4); f.read((char*)&p.z,4); f.read((char*)&sc,4);
+                const PlacedModel* src = mods.byName(std::string(nm,ln));
+                if (src) placed.push_back(PlacedModel(src->name, src->mesh, p, sc, Color(200,200,200)));
+            }
+        }
+        log = "loaded scene: " + path + "  (models=" + std::to_string(placed.size()) + ")"; return true;
     }
 
     // 构建器：执行"模型编辑代码/命令"
     void runCommand(const std::string& line) {
         std::istringstream ss(line); std::string tok; ss>>tok;
         if (tok=="help") {
-            log = "cmds: save F  load F  fill B  place B x y z  tp x y z  clear  name";
+            log = "cmds: save F  load F  fill B  place B x y z  model NAME  modlist  tp x y z  host  clear";
         } else if (tok=="save" || tok=="load") {
             std::string p; ss>>p;
             if (p.empty()) { log="need filename"; return; }
@@ -76,6 +103,20 @@ struct App {
             std::string b; int px,py,pz; ss>>b>>px>>py>>pz;
             world.set(px,py,pz, blockFromName(b));
             log = "placed " + b;
+        } else if (tok=="modlist" || tok=="mods") {
+            std::string s = "mods: ";
+            for (auto& m : mods.models) { s += m.name + " "; }
+            log = s.empty() ? "no mods (drop .obj into mods/)" : s;
+        } else if (tok=="model") {
+            std::string b; ss>>b;
+            const PlacedModel* src = mods.byName(b);
+            if (!src) { log = "no such model: "+b+"  (modlist)"; return; }
+            int bx,by,bz,px,py,pz;
+            if (pick(bx,by,bz,px,py,pz)) {
+                float g = groundH(world, px, pz);
+                placed.push_back(PlacedModel(src->name, src->mesh, V3(px+0.5f, g, pz+0.5f), 1.5f, Color(200,200,200)));
+                log = "placed model " + src->name;
+            } else log = "no surface to place on";
         } else if (tok=="tp") {
             float x,y,z; if (ss>>x>>y>>z) { cam.pos.x=x;cam.pos.y=y;cam.pos.z=z; log="teleported"; }
         } else if (tok=="host") {   // 一键搭建服务器（内置通用服务器脚本）
@@ -92,6 +133,10 @@ struct App {
         } else {
             log = "unknown cmd: " + tok + "  (type help)";
         }
+    }
+    static float groundH(World& w, int x, int z) {
+        for (int y=w.sy-1; y>=0; y--) if (w.solid(x,y,z)) return (float)y+1.0f;
+        return 0.0f;
     }
     static uint8_t blockFromName(const std::string& b) {
         if (b=="grass") return B_GRASS; if (b=="dirt") return B_DIRT;
@@ -122,6 +167,15 @@ struct App {
         world = World(48, 32, 48);
         world.generate();
         tp.loadOrGenerate("textures");   // 优先加载程序目录 textures/ 材质包，缺失用内置
+        mods.loadFolder("mods");         // 加载 mods/ 里的 3D 模型
+        // 预置一个房子和几棵树，让场景不空
+        if (const PlacedModel* h = mods.byName("house"))
+            placed.push_back(PlacedModel(h->name, h->mesh, V3(30, groundH(world,30,28), 28), 2.0f, Color(205,120,60)));
+        for (int i=0;i<4;i++) {
+            const PlacedModel* t = mods.byName("tree");
+            int x = 16 + i*6, z = 15 + i*7;
+            if (t) placed.push_back(PlacedModel(t->name, t->mesh, V3(x, groundH(world,x,z), z), 1.0f, Color(70,150,60)));
+        }
         cam.pos = V3(24, 24, 24);
         cam.yaw = 0.7f;
         return true;
@@ -160,6 +214,9 @@ struct App {
             if (ks == XK_Escape) { exit(0); }
             if (ks == XK_t || ks == XK_Tab) editMode = !editMode;
             if (ks == XK_F5) runCommand("host 25565");   // 一键搭建服务器
+            if (ks == XK_m || ks == XK_g) modelMode = !modelMode;   // 放方块 <-> 放模型
+            if (ks == XK_n) { if (!mods.models.empty()) selModel = (selModel+1)%mods.models.size(); }
+            if (ks == XK_b) { if (!mods.models.empty()) selModel = (selModel+mods.models.size()-1)%mods.models.size(); }
             // 数字键选方块
             static const uint8_t map[8] = {B_GRASS,B_DIRT,B_STONE,B_WOOD,B_LEAVES,B_SAND,B_WATER,B_BRICK};
             for (int i=0;i<8;i++) if (ks == XK_1+i) selBlock = map[i];
@@ -168,7 +225,16 @@ struct App {
             if (e.xbutton.button == 1) { // 左键：放置（编辑模式）
                 if (editMode) {
                     int bx,by,bz,px,py,pz;
-                    if (pick(bx,by,bz,px,py,pz) && world.in(px,py,pz) && !world.solid(px,py,pz))
+                    if (modelMode) {
+                        // 放 3D 模型：立在拾取位置的地面上
+                        if (!mods.models.empty()) {
+                            const PlacedModel& src = mods.models[selModel % mods.models.size()];
+                            if (pick(bx,by,bz,px,py,pz)) {
+                                float g = groundH(world, px, pz);
+                                placed.push_back(PlacedModel(src.name, src.mesh, V3(px+0.5f, g, pz+0.5f), 1.5f, Color(200,200,200)));
+                            }
+                        }
+                    } else if (pick(bx,by,bz,px,py,pz) && world.in(px,py,pz) && !world.solid(px,py,pz))
                         world.set(px,py,pz, selBlock);
                 }
             }
@@ -250,9 +316,15 @@ struct App {
                  cam.pos.x,cam.pos.y,cam.pos.z,cam.pitch,cam.yaw);
         fb.drawText(buf, 8, 32, 1, Color(220,220,220));
         if (editMode) {
-            fb.drawText("EDIT: [1-8]选方块 左键=放 右键=敲 WASD+空格/Shift=移动  F5=一键开服", 8, 46, 1, Color(200,230,120));
-            snprintf(buf,sizeof buf, "CURRENT: %s", blockName(selBlock));
-            fb.drawText(buf, 8, 56, 1, Color(240,210,90));
+            fb.drawText("EDIT: [1-8]方块 [M]模型 [N/B]换模型 左=放 右=敲 WASD移动 F5开服", 8, 46, 1, Color(200,230,120));
+            if (modelMode) {
+                snprintf(buf,sizeof buf, "MODEL MODE: %s   (mods: %zu)", 
+                         mods.models.empty()? "(none, drop .obj in mods/)" : mods.models[selModel%mods.models.size()].name.c_str(), mods.models.size());
+                fb.drawText(buf, 8, 56, 1, Color(150,220,255));
+            } else {
+                snprintf(buf,sizeof buf, "BLOCK MODE: %s", blockName(selBlock));
+                fb.drawText(buf, 8, 56, 1, Color(240,210,90));
+            }
         } else {
             fb.drawText("PLAY:  WASD=移动  空格=跳  [T]=回编辑", 8, 46, 1, Color(200,230,120));
         }
@@ -262,7 +334,12 @@ struct App {
     }
 
     void render() {
-        vr.render(fb, cam, world, 14, tp);
+        // 用场景渲染：天空+地形+3D模型+玩家，共享深度缓冲
+        sc.terrain = world;
+        sc.cam = cam;
+        sc.models = placed;
+        sc.hasPlayer = false;   // 相机=玩家视角，玩家本身不画
+        sc.render(fb, vr, mr, tp, 16);
         drawHUD();
         // XCreateImage 传 NULL 时不会分配像素缓冲(data=NULL)，需自己分配，用完释放
         XImage* img = XCreateImage(dpy, DefaultVisual(dpy, DefaultScreen(dpy)),
