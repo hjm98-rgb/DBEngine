@@ -68,4 +68,21 @@ jobs:
           name: dbengine-windows
           path: dist/dbengine-windows.zip
 
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (Cocoa窗口后端)
+        run: clang++ -x objective-c++ -O2 -framework Cocoa -I . platform/macos_main.mm engine/framebuffer.cpp -o dbengine-mac
+      - name: Package .app
+        run: |
+          mkdir -p dist/dbengine-mac.app/Contents/MacOS
+          cp dbengine-mac dist/dbengine-mac.app/Contents/MacOS/
+          cp -r textures dist/dbengine-mac.app/Contents/MacOS/ 2>/dev/null || true
+          zip -r -q dist/dbengine-macos.zip dist/dbengine-mac.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dbengine-macos
+          path: dist/dbengine-macos.zip
+
   # Windows / macOS 原生窗口后端正在加入：内核是跨平台的，各系统只需各自的窗口层(约50行)。
