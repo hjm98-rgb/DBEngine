@@ -36,3 +36,11 @@ target_link_libraries(dbengine-scene PRIVATE dbengine)
 # 射击玩法演示（射线命中模型=消除+得分，验证能做FPS向游戏）
 add_executable(dbengine-shooter test/shooter_demo.cpp)
 target_link_libraries(dbengine-shooter PRIVATE dbengine)
+
+# 小游戏演示（横版躲避接金币，验证能做小游戏）
+add_executable(dbengine-minigame test/minigame_demo.cpp)
+target_link_libraries(dbengine-minigame PRIVATE dbengine)
+
+# 大型3D演示（纯.obj模型场景：坦克+楼房，无体素，证明不锁MC风格）
+add_executable(dbengine-big3d test/big3d_demo.cpp)
+target_link_libraries(dbengine-big3d PRIVATE dbengine)
