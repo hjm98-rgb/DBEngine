@@ -45,11 +45,13 @@ target_link_libraries(dbengine-minigame PRIVATE dbengine)
 add_executable(dbengine-big3d test/big3d_demo.cpp)
 target_link_libraries(dbengine-big3d PRIVATE dbengine)
 
-# GPU渲染后端验证（OpenGL: 光照+深度，读回像素）
-find_package(X11 REQUIRED)
-find_library(GLLIB GL REQUIRED)
-add_executable(dbengine-gl test/gl_demo.cpp)
-target_link_libraries(dbengine-gl PRIVATE dbengine ${GLLIB} ${X11_LIBRARIES} pthread)
+# GPU渲染后端验证（OpenGL: 光照+深度，读回像素；找不到GL则跳过，不影响其他目标）
+find_package(X11 QUIET)
+find_library(GLLIB GL)
+if (GLLIB AND X11_FOUND)
+  add_executable(dbengine-gl test/gl_demo.cpp)
+  target_link_libraries(dbengine-gl PRIVATE dbengine ${GLLIB} ${X11_LIBRARIES} pthread)
+endif()
 
 # 开放世界开车(GTA类)演示
 add_executable(dbengine-gta test/gta_demo.cpp)

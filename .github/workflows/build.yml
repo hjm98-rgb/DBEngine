@@ -34,8 +34,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install deps (含32位multilib)
         run: |
+          sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y cmake g++-multilib zlib1g-dev libx11-dev
+          sudo apt-get install -y cmake g++-multilib zlib1g-dev zlib1g-dev:i386 libx11-dev
       - name: Configure 32位
         run: cmake -S . -B build32 -DCMAKE_CXX_FLAGS="-m32" -DCMAKE_C_FLAGS="-m32"
       - name: Build 32位
@@ -54,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build (MSVC, GDI窗口后端)
-        run: cl /O2 /EHsc /I . platform/win32_main.cpp engine/framebuffer.cpp /link /OUT:dbengine-win.exe user32.lib gdi32.lib
+        run: cl /O2 /EHsc /DDBENGINE_NO_PNG /I . platform/win32_main.cpp engine/framebuffer.cpp /link /OUT:dbengine-win.exe user32.lib gdi32.lib
       - name: Package
         shell: bash
         run: |

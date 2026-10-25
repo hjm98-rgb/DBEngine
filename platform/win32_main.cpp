@@ -15,7 +15,7 @@ static void renderFrame(float yaw) {
     static VoxelRenderer vr;
     static TexturePack tp;
     static bool init = false;
-    if (!init) { tp.loadOrGenerate("textures"); init = true; }
+    if (!init) { init = true; }   // 默认贴图即可（Windows二进制不依赖PNG/zlib）
     World w(48, 32, 48); w.generate();
     Camera3 cam; cam.pos = V3(24, 26, 24); cam.yaw = yaw; cam.pitch = -0.15f;
     vr.render(*g_fb, cam, w, 14, tp);

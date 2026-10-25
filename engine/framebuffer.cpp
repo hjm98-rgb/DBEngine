@@ -4,7 +4,9 @@
 #include <cstdint>
 #include <vector>
 #include <cstring>
+#ifndef DBENGINE_NO_PNG
 #include <zlib.h>
+#endif
 #include <cstdlib>
 
 namespace dbg {
@@ -110,6 +112,7 @@ const unsigned char Framebuffer::font5x7[96][7] = {
 };
 
 // ---- 简易 PNG 输出（zlib 压缩，用于本机截图验证） ----
+#ifndef DBENGINE_NO_PNG
 namespace {
 uint32_t crc_table[256];
 bool crc_init = false;
@@ -170,10 +173,12 @@ bool save_png(const Framebuffer& fb, const char* path) {
     fclose(f);
     return true;
 }
+#endif // DBENGINE_NO_PNG
 
 } // namespace dbg
 
 // ---- PNG 解码（仅 8bit RGB/RGBA，用于材质包贴图加载） ----
+#ifndef DBENGINE_NO_PNG
 namespace {
 inline int paeth(int a, int b, int c) {
     int p = a + b - c, pa = std::abs(p-a), pb = std::abs(p-b), pc = std::abs(p-c);
@@ -252,3 +257,4 @@ bool dbg::load_png(const char* path, int& w, int& h, std::vector<uint32_t>& rgba
     }
     return true;
 }
+#endif // DBENGINE_NO_PNG
