@@ -108,4 +108,40 @@ public:
     }
 };
 
+// 模型的 AABB 世界包围盒（用于射线命中检测）
+inline void modelBounds(const PlacedModel& m, V3& bmin, V3& bmax) {
+    if (m.mesh.verts.empty()) { bmin=bmax=m.pos; return; }
+    bmin = m.mesh.verts[0]; bmax = m.mesh.verts[0];
+    for (auto& v : m.mesh.verts) {
+        bmin.x = std::min(bmin.x, v.x); bmin.y = std::min(bmin.y, v.y); bmin.z = std::min(bmin.z, v.z);
+        bmax.x = std::max(bmax.x, v.x); bmax.y = std::max(bmax.y, v.y); bmax.z = std::max(bmax.z, v.z);
+    }
+    bmin = bmin * m.scale + m.pos;
+    bmax = bmax * m.scale + m.pos;
+}
+
+// 射线 vs AABB（slab 法）。返回是否命中，t 为最近距离。
+inline bool rayAABB(const V3& o, const V3& d, const V3& bmin, const V3& bmax, float& t) {
+    float tmin = -1e9f, tmax = 1e9f;
+    for (int a = 0; a < 3; a++) {
+        float ori = (a==0)?o.x:(a==1?o.y:o.z), dir = (a==0)?d.x:(a==1?d.y:d.z);
+        float lo = (a==0)?bmin.x:(a==1?bmin.y:bmin.z), hi = (a==0)?bmax.x:(a==1?bmax.y:bmax.z);
+        if (std::fabs(dir) < 1e-8f) { if (ori < lo || ori > hi) return false; }
+        else { float t1 = (lo-ori)/dir, t2 = (hi-ori)/dir; if (t1>t2) std::swap(t1,t2); tmin=std::max(tmin,t1); tmax=std::min(tmax,t2); if (tmin>tmax) return false; }
+    }
+    t = tmin > 0 ? tmin : tmax;
+    return t >= 0 && t < 1e9f;
+}
+
+// 射线打中最近的模型（返回命中项，最近距离写 t）
+inline PlacedModel* hitTestModels(std::vector<PlacedModel>& models, const V3& o, const V3& d, float maxD, float& t) {
+    PlacedModel* best = nullptr; t = maxD;
+    for (auto& m : models) {
+        V3 lo, hi; modelBounds(m, lo, hi);
+        float tt;
+        if (rayAABB(o, d, lo, hi, tt) && tt < t) { t = tt; best = &m; }
+    }
+    return best;
+}
+
 } // namespace dbg

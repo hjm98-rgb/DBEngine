@@ -42,6 +42,7 @@ struct App {
     float lookSens = 0.0025f;
     int lastMX = WIN_W/2, lastMY = WIN_H/2;
     int frame = 0;
+    int score = 0;                 // 游玩模式射击得分
     bool consoleOn = false;        // 命令控制台
     std::string cmd, log;
 
@@ -222,7 +223,7 @@ struct App {
             for (int i=0;i<8;i++) if (ks == XK_1+i) selBlock = map[i];
         }
         if (e.type == ButtonPress) {
-            if (e.xbutton.button == 1) { // 左键：放置（编辑模式）
+            if (e.xbutton.button == 1) { // 左键：编辑放方块/模型；游玩开枪打靶
                 if (editMode) {
                     int bx,by,bz,px,py,pz;
                     if (modelMode) {
@@ -236,6 +237,14 @@ struct App {
                         }
                     } else if (pick(bx,by,bz,px,py,pz) && world.in(px,py,pz) && !world.solid(px,py,pz))
                         world.set(px,py,pz, selBlock);
+                }
+            } else if (!editMode) {
+                // 游玩模式：开枪，打中摆的3D模型=消除+得分
+                float t = 0;
+                PlacedModel* hit = hitTestModels(placed, cam.pos, cam.forward(), 60.0f, t);
+                if (hit) {
+                    for (size_t i=0;i<placed.size();i++) if (&placed[i]==hit) { placed.erase(placed.begin()+i); break; }
+                    score++;
                 }
             }
             if (e.xbutton.button == 3) { // 右键：敲掉
@@ -326,7 +335,8 @@ struct App {
                 fb.drawText(buf, 8, 56, 1, Color(240,210,90));
             }
         } else {
-            fb.drawText("PLAY:  WASD=移动  空格=跳  [T]=回编辑", 8, 46, 1, Color(200,230,120));
+            snprintf(buf,sizeof buf, "PLAY:  WASD=移动  空格=跳  左键=开枪打靶  [T]=回编辑   SCORE=%d", score);
+            fb.drawText(buf, 8, 46, 1, Color(200,230,120));
         }
         // 准星
         fb.fillRect(WIN_W/2-5, WIN_H/2, 11, 1, Color(255,255,255));

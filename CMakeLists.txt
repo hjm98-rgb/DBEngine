@@ -32,3 +32,7 @@ target_link_libraries(dbengine-mesh PRIVATE dbengine)
 # 3D 场景系统演示（天空+地形+模型+模组+玩家）
 add_executable(dbengine-scene test/scene_demo.cpp)
 target_link_libraries(dbengine-scene PRIVATE dbengine)
+
+# 射击玩法演示（射线命中模型=消除+得分，验证能做FPS向游戏）
+add_executable(dbengine-shooter test/shooter_demo.cpp)
+target_link_libraries(dbengine-shooter PRIVATE dbengine)
