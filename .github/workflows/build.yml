@@ -1,0 +1,31 @@
+name: Build DBEngine
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ zlib1g-dev libx11-dev
+      - name: Configure
+        run: cmake -S . -B build
+      - name: Build
+        run: cmake --build build -j2
+      - name: Package
+        run: |
+          mkdir -p dist
+          tar czf dist/dbengine-linux.tar.gz build/dbengine-desktop build/dbengine-shot
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dbengine-linux
+          path: dist/dbengine-linux.tar.gz
+
+  # Windows / macOS 原生窗口后端正在加入：内核是跨平台的，各系统只需各自的窗口层(约50行)。
