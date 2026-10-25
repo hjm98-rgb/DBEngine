@@ -28,4 +28,41 @@ jobs:
           name: dbengine-linux
           path: dist/dbengine-linux.tar.gz
 
+  linux32:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps (含32位multilib)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++-multilib zlib1g-dev libx11-dev
+      - name: Configure 32位
+        run: cmake -S . -B build32 -DCMAKE_CXX_FLAGS="-m32" -DCMAKE_C_FLAGS="-m32"
+      - name: Build 32位
+        run: cmake --build build32 --target dbengine-shot -j2
+      - name: Package 32位
+        run: |
+          mkdir -p dist
+          tar czf dist/dbengine-linux32.tar.gz build32/dbengine-shot
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dbengine-linux32
+          path: dist/dbengine-linux32.tar.gz
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (MSVC)
+        run: cl /O2 /EHsc /I engine test/offscreen.cpp engine/framebuffer.cpp /link /OUT:dbengine-win.exe
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          powershell -Command "Compress-Archive -Path dbengine-win.exe -DestinationPath dist/dbengine-windows.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dbengine-windows
+          path: dist/dbengine-windows.zip
+
   # Windows / macOS 原生窗口后端正在加入：内核是跨平台的，各系统只需各自的窗口层(约50行)。
