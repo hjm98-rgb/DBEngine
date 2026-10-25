@@ -10,6 +10,10 @@
 #include <cstring>
 #include <cmath>
 #include <unistd.h>
+#include <fstream>
+#include <string>
+#include <sstream>
+#include <vector>
 
 using namespace dbg;
 
@@ -29,6 +33,73 @@ struct App {
     float lookSens = 0.0025f;
     int lastMX = WIN_W/2, lastMY = WIN_H/2;
     int frame = 0;
+    bool consoleOn = false;        // 命令控制台
+    std::string cmd, log;
+
+    // ---- 构建器：存档 / 读档（世界保存成文件） ----
+    bool saveWorld(const std::string& path) {
+        std::ofstream f(path, std::ios::binary);
+        if (!f) { log = "save failed: " + path; return false; }
+        f.write((char*)&world.sx,4); f.write((char*)&world.sy,4); f.write((char*)&world.sz,4);
+        f.write((char*)world.blocks.data(), (long)world.blocks.size());
+        f.close();
+        log = "saved " + path; return true;
+    }
+    bool loadWorld(const std::string& path) {
+        std::ifstream f(path, std::ios::binary);
+        if (!f) { log = "load failed: " + path; return false; }
+        int sx,sy,sz; f.read((char*)&sx,4); f.read((char*)&sy,4); f.read((char*)&sz,4);
+        if (sx<=0||sy<=0||sz<=0||sx>256||sy>256||sz>256) { log="bad world file"; return false; }
+        World nw(sx,sy,sz);
+        f.read((char*)nw.blocks.data(), (long)nw.blocks.size());
+        if ((size_t)f.gcount() != nw.blocks.size()) { log="world file truncated"; return false; }
+        world = nw;
+        log = "loaded " + path; return true;
+    }
+
+    // 构建器：执行"模型编辑代码/命令"
+    void runCommand(const std::string& line) {
+        std::istringstream ss(line); std::string tok; ss>>tok;
+        if (tok=="help") {
+            log = "cmds: save F  load F  fill B  place B x y z  tp x y z  clear  name";
+        } else if (tok=="save" || tok=="load") {
+            std::string p; ss>>p;
+            if (p.empty()) { log="need filename"; return; }
+            if (tok=="save") saveWorld(p); else loadWorld(p);
+        } else if (tok=="fill") {
+            std::string b; ss>>b; uint8_t id = blockFromName(b);
+            int cx=(int)cam.pos.x, cy=(int)cam.pos.y, cz=(int)cam.pos.z;
+            for (int x=cx-2;x<=cx+2;x++)for(int z=cz-2;z<=cz+2;z++)for(int y=0;y<=cy;y++)
+                world.set(x,y,z,id);
+            log = "filled " + b + " around player";
+        } else if (tok=="place") {
+            std::string b; int px,py,pz; ss>>b>>px>>py>>pz;
+            world.set(px,py,pz, blockFromName(b));
+            log = "placed " + b;
+        } else if (tok=="tp") {
+            float x,y,z; if (ss>>x>>y>>z) { cam.pos.x=x;cam.pos.y=y;cam.pos.z=z; log="teleported"; }
+        } else if (tok=="host") {   // 一键搭建服务器（内置通用服务器脚本）
+            int port = 25565; ss>>port; if (port<=0) port=25565;
+            std::string c = "python3 platform/server/server.py start "+std::to_string(port)+
+                            " --mode relay --name dbhost >/tmp/dbhost.log 2>&1 &";
+            int r = system(c.c_str());
+            log = (r==0) ? ("server started :"+std::to_string(port)+"  (F5)") : "server start failed";
+        } else if (tok=="clear") {
+            for (int x=0;x<world.sx;x++)for(int y=0;y<world.sy;y++)for(int z=0;z<world.sz;z++)
+                world.set(x,y,z,B_AIR);
+            world.generate();
+            log = "world regenerated";
+        } else {
+            log = "unknown cmd: " + tok + "  (type help)";
+        }
+    }
+    static uint8_t blockFromName(const std::string& b) {
+        if (b=="grass") return B_GRASS; if (b=="dirt") return B_DIRT;
+        if (b=="stone") return B_STONE; if (b=="wood") return B_WOOD;
+        if (b=="leaves") return B_LEAVES; if (b=="sand") return B_SAND;
+        if (b=="water") return B_WATER; if (b=="brick") return B_BRICK;
+        return B_STONE;
+    }
 
     App() : fb(WIN_W, WIN_H) {}
 
@@ -88,6 +159,7 @@ struct App {
             KeySym ks = XLookupKeysym(&e.xkey, 0);
             if (ks == XK_Escape) { exit(0); }
             if (ks == XK_t || ks == XK_Tab) editMode = !editMode;
+            if (ks == XK_F5) runCommand("host 25565");   // 一键搭建服务器
             // 数字键选方块
             static const uint8_t map[8] = {B_GRASS,B_DIRT,B_STONE,B_WOOD,B_LEAVES,B_SAND,B_WATER,B_BRICK};
             for (int i=0;i<8;i++) if (ks == XK_1+i) selBlock = map[i];
@@ -178,7 +250,7 @@ struct App {
                  cam.pos.x,cam.pos.y,cam.pos.z,cam.pitch,cam.yaw);
         fb.drawText(buf, 8, 32, 1, Color(220,220,220));
         if (editMode) {
-            fb.drawText("EDIT: [1-8]选方块  左键=放  右键=敲  WASD+空格/Shift=移动", 8, 46, 1, Color(200,230,120));
+            fb.drawText("EDIT: [1-8]选方块 左键=放 右键=敲 WASD+空格/Shift=移动  F5=一键开服", 8, 46, 1, Color(200,230,120));
             snprintf(buf,sizeof buf, "CURRENT: %s", blockName(selBlock));
             fb.drawText(buf, 8, 56, 1, Color(240,210,90));
         } else {

@@ -20,3 +20,7 @@ target_link_libraries(dbengine-desktop PRIVATE dbengine ${X11_LIBRARIES} Threads
 # 离线渲染验证工具（无窗口，输出 PNG）
 add_executable(dbengine-shot test/offscreen.cpp)
 target_link_libraries(dbengine-shot PRIVATE dbengine)
+
+# 通用2D引擎内核演示（证明是通用引擎，不只是MC）
+add_executable(dbengine-2ddemo test/engine2d_demo.cpp)
+target_link_libraries(dbengine-2ddemo PRIVATE dbengine)
