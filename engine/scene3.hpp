@@ -19,6 +19,8 @@ struct PlacedModel {
     V3 pos;
     float scale = 1.0f;
     Color tint = Color(200, 200, 200);
+    const Texture* tex = nullptr;   // 可选贴图（材质映射），有则用贴图渲染
+    float texScale = 1.0f;
     PlacedModel() {}
     PlacedModel(const std::string& n, const Mesh& m, V3 p, float s, Color t)
         : name(n), mesh(m), pos(p), scale(s), tint(t) {}
@@ -101,10 +103,13 @@ public:
         drawSky(fb, Color(40,80,160), Color(150,190,240), V3(fb.w*0.75f, fb.h*0.18f, 0), 18.0f);
         // 地形（复用外部深度缓冲，与模型互相遮挡）
         vr.renderInto(fb, cam, terrain, renderRange, tp, zbuf);
-        // 摆放的 3D 模型
+        // 摆放的 3D 模型（有贴图则用材质映射渲染，否则纯色）
         mr.useZBuf(zbuf);
         V3 sun(0.4f, 0.85f, 0.4f);
-        for (auto& m : models) mr.render(fb, m.mesh, cam, m.pos, m.scale, m.tint, sun);
+        for (auto& m : models) {
+            if (m.tex) mr.renderTextured(fb, m.mesh, cam, m.pos, m.scale, *m.tex, m.texScale, sun);
+            else mr.render(fb, m.mesh, cam, m.pos, m.scale, m.tint, sun);
+        }
     }
 };
 

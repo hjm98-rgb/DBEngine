@@ -5,6 +5,7 @@
 #include "../engine/mesh.hpp"
 #include "../engine/scene3.hpp"
 #include <X11/Xlib.h>
+#include <X11/Xatom.h>
 #include <X11/keysym.h>
 #include <X11/Xutil.h>
 #include <climits>
@@ -45,6 +46,7 @@ struct App {
     int lastMX = WIN_W/2, lastMY = WIN_H/2;
     int frame = 0;
     int score = 0;                 // 游玩模式射击得分
+    Texture camoTex;               // 迷彩贴图（坦克用）
     bool consoleOn = false;        // 命令控制台
     std::string cmd, log;
 
@@ -148,6 +150,59 @@ struct App {
         if (b=="water") return B_WATER; if (b=="brick") return B_BRICK;
         return B_STONE;
     }
+    // 简单坦克模型（可放入编辑器场景）
+    static void addBox(Mesh& m, float x0,float y0,float z0, float x1,float y1,float z1) {
+        size_t b = m.verts.size();
+        m.verts.push_back(V3(x0,y0,z0)); m.verts.push_back(V3(x1,y0,z0)); m.verts.push_back(V3(x1,y1,z0)); m.verts.push_back(V3(x0,y1,z0));
+        m.verts.push_back(V3(x0,y0,z1)); m.verts.push_back(V3(x1,y0,z1)); m.verts.push_back(V3(x1,y1,z1)); m.verts.push_back(V3(x0,y1,z1));
+        m.addFace(b+0,b+2,b+1); m.addFace(b+0,b+3,b+2);
+        m.addFace(b+1,b+6,b+5); m.addFace(b+1,b+2,b+6);
+        m.addFace(b+5,b+7,b+4); m.addFace(b+5,b+6,b+7);
+        m.addFace(b+4,b+3,b+0); m.addFace(b+4,b+7,b+3);
+        m.addFace(b+3,b+7,b+6); m.addFace(b+3,b+6,b+2);
+    }
+    static Mesh makeTank() {
+        Mesh m;
+        addBox(m, -1.6f,0,-0.9f, 1.6f,0.7f,0.9f);
+        addBox(m, -0.9f,0.7f,-0.7f, 0.9f,1.1f,0.7f);
+        addBox(m, 0.4f,0.8f,-0.22f, 2.6f,0.95f,0.22f);
+        addBox(m, -1.6f,-0.25f,-1.1f, 1.6f,0.0f,1.1f);
+        return m;
+    }
+    static Texture makeCamo() {
+        Texture t(64,64);
+        for (int y=0;y<64;y++) for (int x=0;x<64;x++) {
+            int c = hashNoise(x/6, y/6, 5) % 100;
+            Color col = c<45?Color(70,95,55) : c<80?Color(110,120,60) : Color(90,80,55);
+            col = jitter(col, hashNoise(x,y,7), 0, 8);
+            t.px[(size_t)y*64+x] = col.abgr();
+        }
+        return t;
+    }
+    // 应用图标：_NET_WM_ICON（一块橙色 3D 立方体 logo）
+    void setWindowIcon() {
+        const int S = 64;
+        std::vector<uint32_t> rgba((size_t)S*S, 0xff000000);   // RGBA
+        int cx = S/2, cy = S/2;
+        for (int y=0;y<S;y++) for (int x=0;x<S;x++) {
+            int dx = x-cx, dy = y-cy;
+            // 深蓝渐变底
+            int bgl = 30 + (S-y)*2; if (bgl>90) bgl=90;
+            rgba[(size_t)y*S+x] = 0xff000000u | ((uint32_t)bgl<<16) | ((uint32_t)(bgl/2)<<8) | (uint32_t)(bgl+30);
+            // 三个菱形拼成立方体
+            bool top  = std::abs(dx)/ (S/4) + std::abs(dy + S/5) / (S/5) <= 1;
+            bool left = std::abs(dx + S/4) / (S/4) + std::abs(dy) / (S/5) <= 1;
+            bool right= std::abs(dx - S/4) / (S/4) + std::abs(dy) / (S/5) <= 1;
+            if (top) rgba[(size_t)y*S+x] = 0xff000000u|(0xdc<<16)|(0xa0<<8)|0x30;
+            else if (right) rgba[(size_t)y*S+x] = 0xff000000u|(0xcc<<16)|(0x80<<8)|0x20;
+            else if (left) rgba[(size_t)y*S+x] = 0xff000000u|(0xec<<16)|(0xb8<<8)|0x48;
+        }
+        Atom ic = XInternAtom(dpy, "_NET_WM_ICON", False);
+        std::vector<unsigned long> data; data.reserve(2+S*S);
+        data.push_back(S); data.push_back(S);
+        for (uint32_t v : rgba) data.push_back(v);
+        XChangeProperty(dpy, win, ic, XA_CARDINAL, 32, PropModeReplace, (unsigned char*)data.data(), data.size());
+    }
 
     App() : fb(WIN_W, WIN_H) {}
 
@@ -158,6 +213,7 @@ struct App {
         win = XCreateSimpleWindow(dpy, RootWindow(dpy, scr), 0,0, WIN_W,WIN_H, 0,
                                   BlackPixel(dpy,scr), WhitePixel(dpy,scr));
         XStoreName(dpy, win, "DBEngine - 方块世界 编辑器/游玩");
+        setWindowIcon();   // 应用图标(_NET_WM_ICON)
         XSelectInput(dpy, win, KeyPressMask | KeyReleaseMask | ButtonPressMask |
                                 ButtonReleaseMask | PointerMotionMask | ExposureMask);
         XMapWindow(dpy, win);
@@ -171,13 +227,24 @@ struct App {
         world.generate();
         tp.loadOrGenerate("textures");   // 优先加载程序目录 textures/ 材质包，缺失用内置
         mods.loadFolder("mods");         // 加载 mods/ 里的 3D 模型
-        // 预置一个房子和几棵树，让场景不空
-        if (const PlacedModel* h = mods.byName("house"))
+        // 预置场景：房子(木纹) + 树(树叶) + 坦克(迷彩)，全带贴图
+        const Texture* wood  = tp.face(B_WOOD, 1);
+        const Texture* leaf  = tp.face(B_LEAVES, 1);
+        if (const PlacedModel* h = mods.byName("house")) {
             placed.push_back(PlacedModel(h->name, h->mesh, V3(30, groundH(world,30,28), 28), 2.0f, Color(205,120,60)));
+            placed.back().tex = wood; placed.back().texScale = 1.0f;
+        }
         for (int i=0;i<4;i++) {
             const PlacedModel* t = mods.byName("tree");
             int x = 16 + i*6, z = 15 + i*7;
-            if (t) placed.push_back(PlacedModel(t->name, t->mesh, V3(x, groundH(world,x,z), z), 1.0f, Color(70,150,60)));
+            if (t) { placed.push_back(PlacedModel(t->name, t->mesh, V3(x, groundH(world,x,z), z), 1.0f, Color(70,150,60)));
+                    placed.back().tex = leaf; placed.back().texScale = 1.0f; }
+        }
+        {   // 迷彩坦克
+            PlacedModel tk("tank", makeTank(), V3(22, groundH(world,22,34), 34), 1.0f, Color(120,130,90));
+            static Texture camo = makeCamo();
+            tk.tex = &camo; tk.texScale = 1.0f;
+            placed.push_back(tk);
         }
         cam.pos = V3(24, 24, 24);
         cam.yaw = 0.7f;
